@@ -117,8 +117,10 @@ fun SafetyScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            SectionHeader(title = "Emergency Protocols", icon = Icons.Filled.LocalPolice)
-            Spacer(modifier = Modifier.height(4.dp))
+            item {
+                SectionHeader(title = "Emergency Protocols", icon = Icons.Filled.LocalPolice)
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
             items(safetyItems) { item ->
                 val priorityColor = when (item.priority) {
@@ -196,7 +198,7 @@ fun SafetyScreen() {
             }
 
             val safetyCategory = ResourceRepository.categories.find { it.id == "safety" }
-            safetyCategory?.items?.forEach { item ->
+            items(safetyCategory?.items ?: emptyList()) { item ->
                 ExpandableCard(
                     title = item.title,
                     summary = item.summary,

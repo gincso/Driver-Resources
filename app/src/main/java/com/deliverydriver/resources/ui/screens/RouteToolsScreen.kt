@@ -441,7 +441,8 @@ private fun RouteGuidesTab() {
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        toolCategory?.items?.forEach { item ->
+        val toolItems = toolCategory?.items ?: emptyList()
+        items(toolItems) { item ->
             ExpandableCard(
                 title = item.title,
                 summary = item.summary,

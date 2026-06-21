@@ -79,7 +79,7 @@ fun DeliveryGuideScreen() {
                 SectionHeader(title = category.title, icon = category.icon)
                 Spacer(modifier = Modifier.height(4.dp))
 
-                category.items.forEach { item ->
+                for (item in category.items) {
                     ExpandableCard(
                         title = item.title,
                         summary = item.summary,

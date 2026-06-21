@@ -82,7 +82,7 @@ fun ReferenceHubScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            referenceCategory?.items?.forEach { item ->
+            items(referenceCategory?.items ?: emptyList()) { item ->
                 ExpandableCard(
                     title = item.title,
                     summary = item.summary,

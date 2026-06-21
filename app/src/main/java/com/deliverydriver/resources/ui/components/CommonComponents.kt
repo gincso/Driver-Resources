@@ -39,7 +39,7 @@ fun ExpandableCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = expanded.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (expanded) 4.dp else 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
