@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Delivery truck silhouette -->
+    <group android:translateX="22" android:translateY="28">
+        <!-- Van body -->
+        <path
+            android:fillColor="#FFFF9900"
+            android:pathData="M4,12 L4,44 C4,46.2 5.8,48 8,48 L56,48 C58.2,48 60,46.2 60,44 L60,12 Z" />
+        <!-- Van cabin -->
+        <path
+            android:fillColor="#FFFFB74D"
+            android:pathData="M40,12 L40,24 C40,26.2 41.8,28 44,28 L60,28 L60,12 Z" />
+        <!-- Windshield -->
+        <path
+            android:fillColor="#FF131921"
+            android:pathData="M44,16 L44,25 L57,25 L57,16 Z" />
+        <!-- Wheels -->
+        <path
+            android:fillColor="#FF131921"
+            android:pathData="M14,44 A6,6 0 1,0 14,56 A6,6 0 1,0 14,44 Z" />
+        <path
+            android:fillColor="#FF131921"
+            android:pathData="M44,44 A6,6 0 1,0 44,56 A6,6 0 1,0 44,44 Z" />
+        <!-- Package box on roof -->
+        <path
+            android:fillColor="#FF00A67E"
+            android:pathData="M46,6 L52,6 L52,12 L46,12 Z" />
+        <!-- Box icon -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M12,22 L30,22 L30,38 L12,38 Z" />
+        <path
+            android:fillColor="#FF00A67E"
+            android:pathData="M16,28 L26,28" />
+        <path
+            android:fillColor="#FF00A67E"
+            android:pathData="M16,32 L26,32" />
+    </group>
+</vector>
