@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -22,13 +23,14 @@ import com.deliverydriver.resources.data.models.AccessCode
 import com.deliverydriver.resources.data.models.ChecklistItem
 import com.deliverydriver.resources.data.repository.ResourceRepository
 import com.deliverydriver.resources.ui.components.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RouteToolsScreen() {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Checklist", "Access Codes", "Guides")
+    val tabs = listOf("Checklist", "Access Codes", "Stats", "Guides")
 
     Scaffold(
         topBar = {
@@ -41,7 +43,7 @@ fun RouteToolsScreen() {
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Checklists, codes & resources",
+                            text = "Checklists, codes, stats & guides",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -69,7 +71,8 @@ fun RouteToolsScreen() {
                                     imageVector = when (index) {
                                         0 -> Icons.Filled.Checklist
                                         1 -> Icons.Filled.Lock
-                                        2 -> Icons.Filled.MenuBook
+                                        2 -> Icons.Filled.BarChart
+                                        3 -> Icons.Filled.MenuBook
                                         else -> Icons.Filled.Help
                                     },
                                     contentDescription = null,
@@ -86,7 +89,8 @@ fun RouteToolsScreen() {
             when (selectedTab) {
                 0 -> ChecklistTab()
                 1 -> AccessCodesTab()
-                2 -> RouteGuidesTab()
+                2 -> RouteStatsTab()
+                3 -> RouteGuidesTab()
             }
         }
     }
@@ -451,5 +455,433 @@ private fun RouteGuidesTab() {
         }
     }
 }
+
+
+// ── ROUTE STATS TAB ──────────────────────────────────────────────
+
+@Composable
+private fun RouteStatsTab() {
+    var totalPackages by remember { mutableStateOf("") }
+    var totalStops by remember { mutableStateOf("") }
+    var packagesDelivered by remember { mutableStateOf("") }
+    var stopsCompleted by remember { mutableStateOf("") }
+
+    var shiftStartTime by remember { mutableStateOf<Long?>(null) }
+    var shiftEndTime by remember { mutableStateOf<Long?>(null) }
+    var shiftActive by remember { mutableStateOf(false) }
+    var elapsedSeconds by remember { mutableStateOf(0L) }
+
+    // Timer effect
+    LaunchedEffect(shiftActive) {
+        if (shiftActive && shiftStartTime != null) {
+            while (true) {
+                elapsedSeconds = (System.currentTimeMillis() - shiftStartTime!!) / 1000
+                delay(1000)
+            }
+        }
+    }
+
+    // Reset all inputs
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        // ── Shift Timer Card ─────────────────────────────────────
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (shiftActive)
+                        Color(0xFF00A67E).copy(alpha = 0.12f)
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = if (shiftActive) Icons.Filled.PlayCircle else Icons.Filled.StopCircle,
+                        contentDescription = null,
+                        tint = if (shiftActive) Color(0xFF00A67E) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (shiftActive) "Shift Active" else "Shift Not Started",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (shiftActive) Color(0xFF00A67E) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Elapsed time display
+                    if (shiftActive) {
+                        val hours = elapsedSeconds / 3600
+                        val minutes = (elapsedSeconds % 3600) / 60
+                        val secs = elapsedSeconds % 60
+                        Text(
+                            text = "%d:%02d:%02d".format(hours, minutes, secs),
+                            style = MaterialTheme.typography.displayLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (!shiftActive && shiftStartTime == null) {
+                            Button(
+                                onClick = {
+                                    shiftStartTime = System.currentTimeMillis()
+                                    shiftActive = true
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF00A67E)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Start Shift")
+                            }
+                        }
+                        if (shiftActive) {
+                            Button(
+                                onClick = {
+                                    shiftEndTime = System.currentTimeMillis()
+                                    shiftActive = false
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFFF4444)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.Stop, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("End Shift")
+                            }
+                        }
+                        if (shiftStartTime != null && !shiftActive) {
+                            Button(
+                                onClick = { showResetDialog = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Reset")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Route Inputs ─────────────────────────────────────────
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "Route Numbers",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    StatInputField("Total Packages", totalPackages, { totalPackages = it })
+                    Spacer(modifier = Modifier.height(8.dp))
+                    StatInputField("Total Stops", totalStops, { totalStops = it })
+                    Spacer(modifier = Modifier.height(8.dp))
+                    StatInputField("Packages Delivered", packagesDelivered, { packagesDelivered = it })
+                    Spacer(modifier = Modifier.height(8.dp))
+                    StatInputField("Stops Completed", stopsCompleted, { stopsCompleted = it })
+                }
+            }
+        }
+
+        // ── Calculated Stats ──────────────────────────────────────
+        item {
+            val totalPkg = totalPackages.toIntOrNull() ?: 0
+            val totalStp = totalStops.toIntOrNull() ?: 0
+            val delivered = packagesDelivered.toIntOrNull() ?: 0
+            val completed = stopsCompleted.toIntOrNull() ?: 0
+            val hours = if (shiftStartTime != null && shiftEndTime != null)
+                (shiftEndTime!! - shiftStartTime!!) / 1000.0 / 3600.0
+            else if (shiftStartTime != null && shiftActive)
+                (System.currentTimeMillis() - shiftStartTime!!) / 1000.0 / 3600.0
+            else 0.0
+
+            val packagesPerHour = if (hours > 0) "%.1f".format(delivered / hours) else "—"
+            val stopsPerHour = if (hours > 0) "%.1f".format(completed / hours) else "—"
+            val pkgCompletion = if (totalPkg > 0) (delivered * 100 / totalPkg) else 0
+            val stopCompletion = if (totalStp > 0) (completed * 100 / totalStp) else 0
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "Your Delivery Rate",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Big rate display
+                    if (hours > 0 && delivered > 0) {
+                        Text(
+                            text = "$packagesPerHour",
+                            style = MaterialTheme.typography.displayLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "packages / hour",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Stats grid
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        MiniStat("Pkgs/hr", packagesPerHour, Color(0xFF00A67E))
+                        MiniStat("Stops/hr", stopsPerHour, Color(0xFF00A8E8))
+                        MiniStat("Time", if (hours > 0) "%.1fh".format(hours) else "—", Color(0xFFFFB800))
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Progress bars
+                    if (totalPkg > 0) {
+                        Text(
+                            text = "Package Completion: $pkgCompletion%",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { pkgCompletion / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = Color(0xFF00A67E),
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (totalStp > 0) {
+                        Text(
+                            text = "Stop Completion: $stopCompletion%",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { stopCompletion / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = Color(0xFF00A8E8),
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+
+                    if (totalPkg == 0 && totalStp == 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Enter your route numbers above to calculate your delivery rate and completion percentage.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Benchmark Comparison ─────────────────────────────────
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "Benchmarks",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    BenchmarkRow("Residential", "20-25 stops/hr", "25-30 pkgs/hr")
+                    BenchmarkRow("Apartments", "8-12 stops/hr", "12-18 pkgs/hr")
+                    BenchmarkRow("Rural", "8-12 stops/hr", "10-15 pkgs/hr")
+                    BenchmarkRow("Business", "12-16 stops/hr", "15-20 pkgs/hr")
+                    BenchmarkRow("Mixed Route", "15-20 stops/hr", "20-25 pkgs/hr")
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Compare your numbers to these benchmarks to see how you're pacing!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // ── Daily Totals Summary ─────────────────────────────────
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFFB800).copy(alpha = 0.08f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Insights,
+                            contentDescription = null,
+                            tint = Color(0xFFFFB800),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Pro Tip",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Your first week, focus on accuracy over speed. " +
+                                "Track your numbers daily and you'll see natural improvement " +
+                                "as you learn your route area. Most drivers hit their stride around week 3-4.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+
+    // Reset confirmation dialog
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset Stats?") },
+            text = { Text("This will clear all route numbers and shift data.") },
+            confirmButton = {
+                Button(onClick = {
+                    totalPackages = ""
+                    totalStops = ""
+                    packagesDelivered = ""
+                    stopsCompleted = ""
+                    shiftStartTime = null
+                    shiftEndTime = null
+                    elapsedSeconds = 0L
+                    showResetDialog = false
+                }) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun StatInputField(label: String, value: String, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { newVal ->
+            // Only allow digits
+            if (newVal.all { it.isDigit() }) onValueChange(newVal)
+        },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun MiniStat(label: String, value: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun BenchmarkRow(routeType: String, stopsPerHour: String, pkgsPerHour: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = routeType,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = stopsPerHour,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = pkgsPerHour,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
 
 private val accessCodes = mutableStateListOf<AccessCode>()
