@@ -1,5 +1,4 @@
 *.iml
-.gradle
 /local.properties
 /.idea
 .DS_Store
@@ -9,3 +8,4 @@
 .cxx
 local.properties
 /app/build
+!gradle/wrapper/gradle-wrapper.jar
