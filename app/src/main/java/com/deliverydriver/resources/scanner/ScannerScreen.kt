@@ -1,6 +1,8 @@
 package com.deliverydriver.resources.scanner
 
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
 import android.util.Size
 import android.view.ViewGroup
 import androidx.camera.core.*
@@ -9,6 +11,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,6 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -46,19 +50,122 @@ fun ScannerScreen(
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
 
+    var permissionDeniedForever by remember { mutableStateOf(false) }
+
+    // Track whether the system permission dialog was actually shown
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.status.isGranted) {
-            cameraPermissionState.launchPermissionRequest()
+            try {
+                cameraPermissionState.launchPermissionRequest()
+            } catch (_: Exception) {
+                // Permission request failed — likely "Don't ask again" was checked
+                permissionDeniedForever = true
+            }
         }
     }
 
-    if (!cameraPermissionState.status.isGranted) {
-        PermissionDeniedScreen(onRequestPermission = { cameraPermissionState.launchPermissionRequest() })
-        return
+    // If permission was granted after a previous denial
+    LaunchedEffect(cameraPermissionState.status.isGranted) {
+        if (!cameraPermissionState.status.isGranted) {
+            permissionDeniedForever = !cameraPermissionState.status.shouldShowRationale
+        }
     }
 
-    // Main scanner UI
+    if (cameraPermissionState.status.isGranted) {
+        CameraScannerView(viewModel, state, onNavigateToResults, onNavigateToResources)
+    } else {
+        PermissionDeniedScreen(
+            isPermanentlyDenied = permissionDeniedForever,
+            onRequestPermission = {
+                try {
+                    cameraPermissionState.launchPermissionRequest()
+                } catch (_: Exception) {
+                    permissionDeniedForever = true
+                }
+            },
+            onOpenSettings = {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.fromParts("package", context.packageName, null)
+                }
+                context.startActivity(intent)
+            }
+        )
+    }
+}
+
+@Composable
+private fun PermissionDeniedScreen(
+    isPermanentlyDenied: Boolean,
+    onRequestPermission: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = if (isPermanentlyDenied) Icons.Filled.Settings else Icons.Filled.NoPhotography,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = if (isPermanentlyDenied)
+                Color(0xFFFFB800)
+            else
+                MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = if (isPermanentlyDenied) "Camera access blocked" else "Camera permission needed",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = if (isPermanentlyDenied)
+                "You previously denied camera access and checked \"Don't ask again\".\n\nPlease enable camera permission in Settings to use the scanner."
+            else
+                "Point your camera at the yellow Driver Aid stickers — numbers are detected automatically.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        if (isPermanentlyDenied) {
+            Button(
+                onClick = onOpenSettings,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Filled.Settings, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Open Settings")
+            }
+        } else {
+            Button(
+                onClick = onRequestPermission,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Filled.CameraAlt, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Grant Camera Permission")
+            }
+        }
+    }
+}
+
+// ── Camera Scanner UI ───────────────────────────────────────────
+
+@Composable
+private fun CameraScannerView(
+    viewModel: ScanViewModel,
+    state: ScanState,
+    onNavigateToResults: () -> Unit,
+    onNavigateToResources: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -334,54 +441,6 @@ fun ScannerScreen(
     }
 }
 
-@Composable
-private fun PermissionDeniedScreen(onRequestPermission: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Filled.NoPhotography,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Camera permission needed",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "We need camera access to scan\nyour packages for Driver Aid numbers.",
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "The scanner reads the yellow stickers\nautomatically — just point and scan.",
-            style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(
-            onClick = onRequestPermission,
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(Icons.Filled.CameraAlt, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Grant Camera Permission")
-        }
-    }
-}
-
 // ── Camera Preview with ML Kit OCR ─────────────────────────────────
 
 @Composable
@@ -394,24 +453,21 @@ fun CameraPreview(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Keep these references across recompositions
     val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
     val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
     var lastDetectionTime = remember { mutableLongStateOf(0L) }
     var camera by remember { mutableStateOf<Camera?>(null) }
-    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val DETECTION_THROTTLE_MS = 500L
 
-    // 🧹 Cleanup on dispose
+    // Cleanup
     DisposableEffect(Unit) {
         onDispose {
             analyzerExecutor.shutdown()
             textRecognizer.close()
-            cameraProvider?.unbindAll()
         }
     }
 
-    // 🔄 Handle flash toggle
+    // Flash toggle
     LaunchedEffect(flashOn) {
         try {
             if (camera?.cameraInfo?.hasFlashUnit() == true) {
@@ -439,7 +495,6 @@ fun CameraPreview(
                 cameraProviderFuture.addListener({
                     try {
                         val provider = cameraProviderFuture.get()
-                        cameraProvider = provider
 
                         val preview = Preview.Builder().build()
                         preview.setSurfaceProvider(previewView.surfaceProvider)
@@ -510,7 +565,6 @@ fun CameraPreview(
 
             previewView
         },
-        // The update lambda isn't needed since we handle flash via LaunchedEffect
         modifier = modifier
     )
 }
