@@ -12,7 +12,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -20,14 +19,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -48,7 +46,6 @@ fun ScannerScreen(
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         if (!cameraPermissionState.status.isGranted) {
@@ -57,41 +54,7 @@ fun ScannerScreen(
     }
 
     if (!cameraPermissionState.status.isGranted) {
-        // Permission not granted
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.NoPhotography,
-                contentDescription = null,
-                modifier = Modifier.size(80.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Camera permission needed",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "We need camera access to scan\nyour packages for Driver Aid numbers.",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            Button(
-                onClick = { cameraPermissionState.launchPermissionRequest() },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Filled.CameraAlt, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Grant Permission")
-            }
-        }
+        PermissionDeniedScreen(onRequestPermission = { cameraPermissionState.launchPermissionRequest() })
         return
     }
 
@@ -154,10 +117,11 @@ fun ScannerScreen(
             CameraPreview(
                 onNumberDetected = { viewModel.onNumberDetected(it) },
                 flashOn = state.flashOn,
+                onError = { msg -> viewModel.setError(msg) },
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Overlay guide frame
+            // Scanning overlay - bracket frame
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -169,34 +133,70 @@ fun ScannerScreen(
                         .size(280.dp)
                         .border(
                             width = 2.dp,
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = Color.White.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(16.dp)
                         )
                 )
             }
 
-            // Top gradient fade for readability
+            // Scanner instruction text
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(80.dp)
-                    .background(
-                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.background.copy(alpha = 0.7f),
-                                MaterialTheme.colorScheme.background.copy(alpha = 0f)
-                            )
-                        )
+                    .padding(top = 16.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = "Frame the yellow sticker in the square",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                     )
-            )
+                }
+            }
 
-            // Bottom panel with last detection and count
+            // Error banner
+            state.error?.let { errorMsg ->
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 80.dp, start = 16.dp, end = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFF4444).copy(alpha = 0.9f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = errorMsg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            // Bottom panel
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(
-                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        brush = Brush.verticalGradient(
                             colors = listOf(
                                 MaterialTheme.colorScheme.surface.copy(alpha = 0f),
                                 MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
@@ -296,7 +296,7 @@ fun ScannerScreen(
                     }
                 }
 
-                // Quick preview of scanned numbers
+                // Rolling log of scanned numbers
                 if (state.scannedPackages.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
@@ -309,18 +309,18 @@ fun ScannerScreen(
                                 .heightIn(max = 120.dp)
                                 .padding(8.dp)
                         ) {
-                            items(state.scannedPackages.takeLast(6).reversed()) { pkg ->
+                            items(state.scannedPackages.takeLast(8).reversed()) { pkg ->
                                 Text(
-                                    text = "#${pkg.driverAidNumber}",
+                                    text = "#${pkg.driverAidNumber}${if (pkg.count > 1) " (×${pkg.count})" else ""}",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier.padding(vertical = 1.dp)
                                 )
                             }
-                            if (state.scannedPackages.size > 6) {
+                            if (state.scannedPackages.size > 8) {
                                 item {
                                     Text(
-                                        text = "... and ${state.scannedPackages.size - 6} more",
+                                        text = "... and ${state.scannedPackages.size - 8} more",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -335,20 +335,93 @@ fun ScannerScreen(
 }
 
 @Composable
+private fun PermissionDeniedScreen(onRequestPermission: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Filled.NoPhotography,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Camera permission needed",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "We need camera access to scan\nyour packages for Driver Aid numbers.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "The scanner reads the yellow stickers\nautomatically — just point and scan.",
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = onRequestPermission,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Filled.CameraAlt, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Grant Camera Permission")
+        }
+    }
+}
+
+// ── Camera Preview with ML Kit OCR ─────────────────────────────────
+
+@Composable
 fun CameraPreview(
     onNumberDetected: (Int) -> Unit,
     flashOn: Boolean,
+    onError: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Keep these references across recompositions
     val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
-
     val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
-
-    // Throttle detection to avoid spam
     var lastDetectionTime = remember { mutableLongStateOf(0L) }
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val DETECTION_THROTTLE_MS = 500L
+
+    // 🧹 Cleanup on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            analyzerExecutor.shutdown()
+            textRecognizer.close()
+            cameraProvider?.unbindAll()
+        }
+    }
+
+    // 🔄 Handle flash toggle
+    LaunchedEffect(flashOn) {
+        try {
+            if (camera?.cameraInfo?.hasFlashUnit() == true) {
+                @Suppress("DEPRECATION")
+                camera?.cameraControl?.enableTorch(flashOn)
+            }
+        } catch (_: Exception) {
+            // Flash toggle failed silently
+        }
+    }
 
     AndroidView(
         factory = { ctx ->
@@ -361,76 +434,83 @@ fun CameraPreview(
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             }
 
-            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-            cameraProviderFuture.addListener({
-                val cameraProvider = cameraProviderFuture.get()
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                cameraProviderFuture.addListener({
+                    try {
+                        val provider = cameraProviderFuture.get()
+                        cameraProvider = provider
 
-                val preview = Preview.Builder().build()
-                preview.setSurfaceProvider(previewView.surfaceProvider)
+                        val preview = Preview.Builder().build()
+                        preview.setSurfaceProvider(previewView.surfaceProvider)
 
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setTargetResolution(Size(1280, 720))
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setTargetResolution(Size(1280, 720))
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
 
-                imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
-                    val mediaImage = imageProxy.image
-                    if (mediaImage != null) {
-                        val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                        imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
+                            val mediaImage = imageProxy.image
+                            if (mediaImage != null) {
+                                val inputImage = InputImage.fromMediaImage(
+                                    mediaImage,
+                                    imageProxy.imageInfo.rotationDegrees
+                                )
 
-                        textRecognizer.process(inputImage)
-                            .addOnSuccessListener { visionText ->
-                                val now = System.currentTimeMillis()
-                                if (now - lastDetectionTime.value < DETECTION_THROTTLE_MS) return@addOnSuccessListener
+                                textRecognizer.process(inputImage)
+                                    .addOnSuccessListener { visionText ->
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastDetectionTime.value < DETECTION_THROTTLE_MS) return@addOnSuccessListener
 
-                                val numbers = mutableListOf<Int>()
-                                for (block in visionText.textBlocks) {
-                                    for (line in block.lines) {
-                                        val text = line.text.trim()
-                                        // Look for 2-4 digit numbers (Driver Aid format)
-                                        val digits = text.filter { it.isDigit() }
-                                        if (digits.length in 2..4) {
-                                            val num = digits.toIntOrNull()
-                                            if (num != null && num in 1..9999) {
-                                                numbers.add(num)
+                                        val numbers = mutableListOf<Int>()
+                                        for (block in visionText.textBlocks) {
+                                            for (line in block.lines) {
+                                                val text = line.text.trim()
+                                                val digits = text.filter { it.isDigit() }
+                                                if (digits.length in 2..4) {
+                                                    val num = digits.toIntOrNull()
+                                                    if (num != null && num in 1..9999) {
+                                                        numbers.add(num)
+                                                    }
+                                                }
                                             }
                                         }
-                                    }
-                                }
 
-                                // Pick the most confident (first found)
-                                if (numbers.isNotEmpty()) {
-                                    val bestNumber = numbers.first()
-                                    lastDetectionTime.value = now
-                                    onNumberDetected(bestNumber)
-                                }
-                            }
-                            .addOnCompleteListener {
+                                        if (numbers.isNotEmpty()) {
+                                            lastDetectionTime.value = now
+                                            onNumberDetected(numbers.first())
+                                        }
+                                    }
+                                    .addOnCompleteListener {
+                                        imageProxy.close()
+                                    }
+                            } else {
                                 imageProxy.close()
                             }
-                    } else {
-                        imageProxy.close()
+                        }
+
+                        val cam = provider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview,
+                            imageAnalysis
+                        )
+                        camera = cam
+
+                    } catch (e: Exception) {
+                        onError("Camera failed: ${e.localizedMessage ?: "unknown error"}")
                     }
-                }
+                }, ContextCompat.getMainExecutor(ctx))
 
-                // Flash control
-                val camera = cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    preview,
-                    imageAnalysis
-                )
-
-                if (camera.cameraInfo.hasFlashUnit()) {
-                    @Suppress("DEPRECATION")
-                    camera.cameraControl.enableTorch(flashOn)
-                }
-            }, ContextCompat.getMainExecutor(ctx))
+            } catch (e: Exception) {
+                onError("Camera init failed: ${e.localizedMessage ?: "unknown error"}")
+            }
 
             previewView
         },
+        // The update lambda isn't needed since we handle flash via LaunchedEffect
         modifier = modifier
     )
 }
