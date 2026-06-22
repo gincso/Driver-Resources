@@ -423,9 +423,9 @@ fun CameraPreview(
                     imageAnalysis
                 )
 
+                if (camera.cameraInfo.hasFlashUnit()) {
                     camera.cameraControl.setTorchEnabled(flashOn)
                 }
-
             }, ContextCompat.getMainExecutor(ctx))
 
             previewView
