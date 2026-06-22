@@ -83,9 +83,9 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 item { StatCard("Stops/HR", "15-25", Icons.Filled.Speed, Color(0xFF00A67E)) }
-                item { StatCard("Route Avg", "180-220", Icons.Filled.Route, Color(0xFF00A8E8)) }
+                item { StatCard("Route Avg", "180-220", Icons.Filled.AltRoute, Color(0xFF00A8E8)) }
                 item { StatCard("OT Goal", ">99%", Icons.Filled.CheckCircle, Color(0xFFFFB800)) }
-                item { StatCard("DNR Max", "<1%", Icons.Filled.GppBad, Color(0xFFFF4444)) }
+                item { StatCard("DNR Max", "<1%", Icons.Filled.GppMaybe, Color(0xFFFF4444)) }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -159,7 +159,7 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // ── Route Preview ──────────────────────────────────────
-            SectionHeader(title = "Today's Route Quick Ref", icon = Icons.Filled.Route)
+            SectionHeader(title = "Today's Route Quick Ref", icon = Icons.Filled.AltRoute)
             Spacer(modifier = Modifier.height(8.dp))
 
             Card(

@@ -443,13 +443,13 @@ Phones die. Paper doesn't."""),
     val safetyItems = listOf(
         SafetyItem("s1", "Dog Encounter", "Stop, don't run, use package as shield", "DETAILED_DOG", Icons.Filled.Pets, SafetyPriority.CRITICAL),
         SafetyItem("s2", "Hostile Customer", "Return to van, lock doors, call dispatch", "Leave immediately. Do not engage. Call DSP and report.", Icons.Filled.PersonOff, SafetyPriority.CRITICAL),
-        SafetyItem("s3", "Car Accident", "Call 911, then dispatch, take photos", "DETAILED_ACCIDENT", Icons.Filled.CarCrash, SafetyPriority.CRITICAL),
+        SafetyItem("s3", "Car Accident", "Call 911, then dispatch, take photos", "DETAILED_ACCIDENT", Icons.Filled.Build, SafetyPriority.CRITICAL),
         SafetyItem("s4", "Medical Emergency", "Call 911, tell dispatch, stay on line", "Call 911 first. Then call your DSP. Follow dispatcher instructions.", Icons.Filled.MedicalServices, SafetyPriority.CRITICAL),
         SafetyItem("s5", "Van Breakdown", "Hazards on, call dispatch, don't leave van", "DETAILED_BREAKDOWN", Icons.Filled.Build, SafetyPriority.HIGH),
-        SafetyItem("s6", "Extreme Weather", "Pull over safely, wait it out, call dispatch", "DETAILED_WEATHER", Icons.Filled.Thunderstorm, SafetyPriority.HIGH),
-        SafetyItem("s7", "Theft / Robbery", "Do not resist, give items, call 911 after", "Do NOT resist. Give them what they want. Your safety > packages. Call 911 immediately after.", Icons.Filled.TheaterComedy, SafetyPriority.CRITICAL),
+        SafetyItem("s6", "Extreme Weather", "Pull over safely, wait it out, call dispatch", "DETAILED_WEATHER", Icons.Filled.Warning, SafetyPriority.HIGH),
+        SafetyItem("s7", "Theft / Robbery", "Do not resist, give items, call 911 after", "Do NOT resist. Give them what they want. Your safety > packages. Call 911 immediately after.", Icons.Filled.MoodBad, SafetyPriority.CRITICAL),
         SafetyItem("s8", "Fire", "Evacuate area, call 911, notify dispatch", "Evacuate immediately. Call 911. Then call dispatch.", Icons.Filled.LocalFireDepartment, SafetyPriority.CRITICAL),
-        SafetyItem("s9", "Gas Leak / Smell", "Turn off van, evacuate, call 911", "Turn engine off immediately. Evacuate area. Call 911 and dispatch.", Icons.Filled.PropaneTank, SafetyPriority.CRITICAL),
+        SafetyItem("s9", "Gas Leak / Smell", "Turn off van, evacuate, call 911", "Turn engine off immediately. Evacuate area. Call 911 and dispatch.", Icons.Filled.Warning, SafetyPriority.CRITICAL),
         SafetyItem("s10", "Harassment", "Leave area, report to dispatch and police", "Leave the area immediately. Report to your DSP and local police if needed.", Icons.Filled.GppMaybe, SafetyPriority.HIGH)
     )
 

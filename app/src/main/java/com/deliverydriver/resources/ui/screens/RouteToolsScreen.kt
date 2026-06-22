@@ -394,7 +394,7 @@ private fun AddAccessCodeDialog(
             Button(
                 onClick = {
                     if (address.isNotBlank() && code.isNotBlank()) {
-                        val nextId = (accessCodes.maxOfOrNull { it.id } ?: 0) + 1
+                        val nextId = (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
                         onSave(AccessCode(id = nextId, address = address, code = code, notes = notes))
                     }
                 },
@@ -884,4 +884,3 @@ private fun BenchmarkRow(routeType: String, stopsPerHour: String, pkgsPerHour: S
 }
 
 
-private val accessCodes = mutableStateListOf<AccessCode>()
