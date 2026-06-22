@@ -39,7 +39,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.concurrent.Executors
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ScannerScreen(
     viewModel: ScanViewModel = viewModel(),
@@ -424,7 +424,8 @@ fun CameraPreview(
                 )
 
                 if (camera.cameraInfo.hasFlashUnit()) {
-                    camera.cameraControl.setTorchEnabled(flashOn)
+                    @Suppress("DEPRECATION")
+                    camera.cameraControl.enableTorch(flashOn)
                 }
             }, ContextCompat.getMainExecutor(ctx))
 
