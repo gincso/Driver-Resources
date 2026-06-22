@@ -423,9 +423,7 @@ fun CameraPreview(
                     imageAnalysis
                 )
 
-                if (camera.cameraInfo.hasFlashUnit()) {
-                    @Suppress("DEPRECATION")
-                    camera.cameraControl.enableTorch(flashOn)
+                    camera.cameraControl.setTorchEnabled(flashOn)
                 }
 
             }, ContextCompat.getMainExecutor(ctx))
