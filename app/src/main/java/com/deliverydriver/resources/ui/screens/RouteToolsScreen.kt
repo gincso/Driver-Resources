@@ -425,7 +425,7 @@ private fun StopsTab() {
     var searchQuery by remember { mutableStateOf("") }
     val sortByAddress = com.deliverydriver.resources.scanner.RouteViewModel.sortByAddress
 
-    val filteredStops = remember(stops, searchQuery) {
+    val filteredStops = remember(stops, searchQuery, sortByAddress) {
         if (searchQuery.isBlank()) com.deliverydriver.resources.scanner.RouteViewModel.getSortedStops()
         else com.deliverydriver.resources.scanner.RouteViewModel.getSortedStops().filter {
             it.address.contains(searchQuery, ignoreCase = true) ||
