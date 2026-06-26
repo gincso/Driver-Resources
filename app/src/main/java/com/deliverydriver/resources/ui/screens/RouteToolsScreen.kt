@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,6 +23,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.deliverydriver.resources.data.models.AccessCode
 import com.deliverydriver.resources.data.models.ChecklistItem
+import com.deliverydriver.resources.data.models.DeliveryStop
+import com.deliverydriver.resources.data.models.StopStatus
 import com.deliverydriver.resources.data.repository.ResourceRepository
 import com.deliverydriver.resources.ui.components.*
 import kotlinx.coroutines.delay
@@ -30,7 +34,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun RouteToolsScreen() {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Checklist", "Access Codes", "Stats", "Guides")
+    val tabs = listOf("Checklist", "Access Codes", "Stops", "Stats", "Guides")
 
     Scaffold(
         topBar = {
@@ -71,8 +75,9 @@ fun RouteToolsScreen() {
                                     imageVector = when (index) {
                                         0 -> Icons.Filled.Checklist
                                         1 -> Icons.Filled.Lock
-                                        2 -> Icons.Filled.BarChart
-                                        3 -> Icons.Filled.MenuBook
+                                        2 -> Icons.Filled.Route
+                                        3 -> Icons.Filled.BarChart
+                                        4 -> Icons.Filled.MenuBook
                                         else -> Icons.Filled.Help
                                     },
                                     contentDescription = null,
@@ -89,8 +94,9 @@ fun RouteToolsScreen() {
             when (selectedTab) {
                 0 -> ChecklistTab()
                 1 -> AccessCodesTab()
-                2 -> RouteStatsTab()
-                3 -> RouteGuidesTab()
+                2 -> StopsTab()
+                3 -> RouteStatsTab()
+                4 -> RouteGuidesTab()
             }
         }
     }
@@ -407,6 +413,575 @@ private fun AddAccessCodeDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+// ── STOPS TAB ────────────────────────────────────────────────────
+
+@Composable
+private fun StopsTab() {
+    val stops by com.deliverydriver.resources.scanner.RouteViewModel.stops.collectAsState()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingStop by remember { mutableStateOf<DeliveryStop?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    val sortByAddress = com.deliverydriver.resources.scanner.RouteViewModel.sortByAddress
+
+    val filteredStops = remember(stops, searchQuery) {
+        if (searchQuery.isBlank()) com.deliverydriver.resources.scanner.RouteViewModel.getSortedStops()
+        else com.deliverydriver.resources.scanner.RouteViewModel.getSortedStops().filter {
+            it.address.contains(searchQuery, ignoreCase = true) ||
+            it.customerName.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    val (totalStops, deliveredStops, totalPackages) = com.deliverydriver.resources.scanner.RouteViewModel.getStats()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        // Summary card
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Route,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Delivery Stops",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (totalStops > 0)
+                                "$deliveredStops / $totalStops delivered · $totalPackages packages"
+                            else
+                                "No stops added yet",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // Search + Add + Sort bar
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search address or name...") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = if (searchQuery.isNotEmpty()) {{
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                        }
+                    }} else null,
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = {
+                    com.deliverydriver.resources.scanner.RouteViewModel.toggleSort()
+                }) {
+                    Icon(
+                        imageVector = if (sortByAddress) Icons.Filled.SortByAlpha else Icons.Filled.Numbers,
+                        contentDescription = "Toggle sort",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(
+                onClick = { showAddDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Stop")
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        if (filteredStops.isEmpty()) {
+            item {
+                EmptyState(
+                    message = if (stops.isEmpty())
+                        "No stops yet.\nTap \"Add Stop\" to start building your route!"
+                    else
+                        "No stops match your search.",
+                    icon = Icons.Filled.Route
+                )
+            }
+        }
+
+        // Sort indicator
+        if (filteredStops.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Sorted by: ${if (sortByAddress) "Address (A-Z)" else "Stop Order"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+        }
+
+        items(filteredStops, key = { it.id }) { stop ->
+            val statusColor = when (stop.status) {
+                StopStatus.PENDING -> Color(0xFFFFB800)
+                StopStatus.DELIVERED -> Color(0xFF00A67E)
+                StopStatus.ATTEMPTED -> Color(0xFFFF8C00)
+                StopStatus.SKIPPED -> Color(0xFFFF4444)
+            }
+
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = when (stop.status) {
+                        StopStatus.DELIVERED -> Color(0xFF00A67E).copy(alpha = 0.08f)
+                        StopStatus.SKIPPED -> Color(0xFFFF4444).copy(alpha = 0.08f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    }
+                ),
+                onClick = { editingStop = stop }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Status indicator dot
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(statusColor)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stop.address,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (stop.city.isNotBlank()) {
+                                Text(
+                                    text = if (stop.state.isNotBlank()) "${stop.city}, ${stop.state}" else stop.city,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        // Status badge
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = statusColor.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = when (stop.status) {
+                                    StopStatus.PENDING -> "Pending"
+                                    StopStatus.DELIVERED -> "Done"
+                                    StopStatus.ATTEMPTED -> "Attempt"
+                                    StopStatus.SKIPPED -> "Skip"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = statusColor,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Customer info row
+                    if (stop.customerName.isNotBlank() || stop.customerPhone.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = buildString {
+                                    if (stop.customerName.isNotBlank()) append(stop.customerName)
+                                    if (stop.customerName.isNotBlank() && stop.customerPhone.isNotBlank()) append(" · ")
+                                    if (stop.customerPhone.isNotBlank()) append(stop.customerPhone)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Package info row
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Inventory2,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${stop.packageCount} package${if (stop.packageCount != 1) "s" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (stop.deliveryNotes.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(
+                                imageVector = Icons.Filled.Notes,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (stop.accessCode.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(
+                                imageVector = Icons.Filled.VpnKey,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = Color(0xFFFFB800)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Clear all button
+        if (stops.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        com.deliverydriver.resources.scanner.RouteViewModel.clearStops()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(Icons.Filled.DeleteSweep, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Clear All Stops")
+                }
+            }
+        }
+    }
+
+    if (showAddDialog) {
+        AddEditStopDialog(
+            onDismiss = { showAddDialog = false },
+            onSave = { stop ->
+                com.deliverydriver.resources.scanner.RouteViewModel.addStop(stop)
+                showAddDialog = false
+            }
+        )
+    }
+
+    editingStop?.let { stop ->
+        EditStopDialog(
+            stop = stop,
+            onDismiss = { editingStop = null },
+            onUpdate = { updated ->
+                com.deliverydriver.resources.scanner.RouteViewModel.updateStop(updated)
+                editingStop = null
+            },
+            onDelete = {
+                com.deliverydriver.resources.scanner.RouteViewModel.removeStop(stop.id)
+                editingStop = null
+            },
+            onStatusChange = { status ->
+                com.deliverydriver.resources.scanner.RouteViewModel.updateStatus(stop.id, status)
+            }
+        )
+    }
+}
+
+@Composable
+private fun AddEditStopDialog(
+    existingStop: DeliveryStop? = null,
+    onDismiss: () -> Unit,
+    onSave: (DeliveryStop) -> Unit
+) {
+    var address by remember { mutableStateOf(existingStop?.address ?: "") }
+    var city by remember { mutableStateOf(existingStop?.city ?: "") }
+    var state by remember { mutableStateOf(existingStop?.state ?: "") }
+    var zip by remember { mutableStateOf(existingStop?.zip ?: "") }
+    var customerName by remember { mutableStateOf(existingStop?.customerName ?: "") }
+    var customerPhone by remember { mutableStateOf(existingStop?.customerPhone ?: "") }
+    var packageCount by remember { mutableStateOf(existingStop?.packageCount?.toString() ?: "1") }
+    var deliveryNotes by remember { mutableStateOf(existingStop?.deliveryNotes ?: "") }
+    var accessCode by remember { mutableStateOf(existingStop?.accessCode ?: "") }
+
+    val isEditing = existingStop != null
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isEditing) "Edit Stop" else "Add Delivery Stop") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Address *") },
+                    placeholder = { Text("e.g., 123 Main St") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = city,
+                        onValueChange = { city = it },
+                        label = { Text("City") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = state,
+                        onValueChange = { state = it },
+                        label = { Text("State") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.width(70.dp)
+                    )
+                    OutlinedTextField(
+                        value = zip,
+                        onValueChange = { zip = it },
+                        label = { Text("ZIP") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.width(90.dp)
+                    )
+                }
+                OutlinedTextField(
+                    value = customerName,
+                    onValueChange = { customerName = it },
+                    label = { Text("Customer Name") },
+                    placeholder = { Text("e.g., John Doe") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = customerPhone,
+                    onValueChange = { customerPhone = it },
+                    label = { Text("Customer Phone") },
+                    placeholder = { Text("e.g., (555) 123-4567") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = packageCount,
+                    onValueChange = { if (it.all { c -> c.isDigit() }) packageCount = it },
+                    label = { Text("Package Count") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = deliveryNotes,
+                    onValueChange = { deliveryNotes = it },
+                    label = { Text("Delivery Notes") },
+                    placeholder = { Text("e.g., Leave at back door") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = accessCode,
+                    onValueChange = { accessCode = it },
+                    label = { Text("Access Code / Gate Code") },
+                    placeholder = { Text("e.g., #1234") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (address.isNotBlank()) {
+                        onSave(DeliveryStop(
+                            id = existingStop?.id ?: java.util.UUID.randomUUID().toString(),
+                            address = address,
+                            city = city,
+                            state = state,
+                            zip = zip,
+                            customerName = customerName,
+                            customerPhone = customerPhone,
+                            packageCount = packageCount.toIntOrNull() ?: 1,
+                            deliveryNotes = deliveryNotes,
+                            accessCode = accessCode,
+                            status = existingStop?.status ?: StopStatus.PENDING,
+                            stopOrder = existingStop?.stopOrder ?: 0,
+                            timestamp = existingStop?.timestamp ?: System.currentTimeMillis()
+                        ))
+                    }
+                },
+                enabled = address.isNotBlank()
+            ) {
+                Text(if (isEditing) "Update" else "Add Stop")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun EditStopDialog(
+    stop: DeliveryStop,
+    onDismiss: () -> Unit,
+    onUpdate: (DeliveryStop) -> Unit,
+    onDelete: () -> Unit,
+    onStatusChange: (StopStatus) -> Unit
+) {
+    var showEditForm by remember { mutableStateOf(false) }
+
+    if (showEditForm) {
+        AddEditStopDialog(
+            existingStop = stop,
+            onDismiss = { showEditForm = false },
+            onSave = { updated ->
+                onUpdate(updated)
+            }
+        )
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stop.address) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Stop details
+                if (stop.customerName.isNotBlank() || stop.customerPhone.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = buildString {
+                                if (stop.customerName.isNotBlank()) append(stop.customerName)
+                                if (stop.customerName.isNotBlank() && stop.customerPhone.isNotBlank()) append(" · ")
+                                if (stop.customerPhone.isNotBlank()) append(stop.customerPhone)
+                            },
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Inventory2, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("${stop.packageCount} package${if (stop.packageCount != 1) "s" else ""}")
+                }
+
+                if (stop.deliveryNotes.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Notes, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stop.deliveryNotes, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                if (stop.accessCode.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFFFFB800))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Code: ${stop.accessCode}", color = Color(0xFFFFB800), fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                HorizontalDivider()
+
+                // Status buttons
+                Text("Update Status:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    SmallStatusButton("Done", Color(0xFF00A67E)) { onStatusChange(StopStatus.DELIVERED) }
+                    SmallStatusButton("Attempt", Color(0xFFFF8C00)) { onStatusChange(StopStatus.ATTEMPTED) }
+                    SmallStatusButton("Skip", Color(0xFFFF4444)) { onStatusChange(StopStatus.SKIPPED) }
+                    SmallStatusButton("Pending", Color(0xFFFFB800)) { onStatusChange(StopStatus.PENDING) }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { showEditForm = true }) {
+                Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Edit Details")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDelete) {
+                    Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        }
+    )
+}
+
+@Composable
+private fun SmallStatusButton(label: String, color: Color, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.15f)),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.height(32.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+    }
 }
 
 // ── ROUTE GUIDES TAB ─────────────────────────────────────────────

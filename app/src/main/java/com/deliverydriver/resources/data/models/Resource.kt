@@ -59,3 +59,23 @@ data class DailyTip(
     val text: String,
     val category: String
 )
+
+data class DeliveryStop(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val address: String,
+    val city: String = "",
+    val state: String = "",
+    val zip: String = "",
+    val customerName: String = "",
+    val customerPhone: String = "",
+    val packageCount: Int = 1,
+    val deliveryNotes: String = "",
+    val accessCode: String = "",
+    val status: StopStatus = StopStatus.PENDING,
+    val stopOrder: Int = 0,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+enum class StopStatus {
+    PENDING, DELIVERED, ATTEMPTED, SKIPPED
+}

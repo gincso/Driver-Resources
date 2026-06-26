@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub Release with the APK'
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   build:
@@ -30,9 +36,33 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Sort-Assist-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Extract version from build.gradle.kts
+        id: get_version
+        run: |
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: (github.event_name == 'workflow_dispatch' && inputs.create_release) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Sort Assist v${{ steps.get_version.outputs.version }}
+          body: |
+            Auto-built from commit ${{ github.sha }}
+            
+            ## Changes
+            ${{ github.event.head_commit.message }}
+          files: app/build/outputs/apk/debug/*.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

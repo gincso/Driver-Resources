@@ -4,6 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -24,6 +27,9 @@ import com.deliverydriver.resources.scanner.ScannerScreen
 import com.deliverydriver.resources.scanner.ScanResultsScreen
 import com.deliverydriver.resources.ui.screens.*
 import com.deliverydriver.resources.ui.theme.DeliveryDriverTheme
+import com.deliverydriver.resources.updater.UpdateInfo
+import com.deliverydriver.resources.updater.UpdateManager
+import com.deliverydriver.resources.updater.checkForUpdate
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +62,17 @@ sealed class Screen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverApp() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val updateManager = remember { UpdateManager(context) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+
+    LaunchedEffect(Unit) {
+        val info = checkForUpdate()
+        if (info.available) {
+            updateInfo = info
+        }
+    }
+
     val navController = rememberNavController()
 
     // Bottom nav screens (max 5)
@@ -171,6 +188,49 @@ fun DriverApp() {
             composable(Screen.ReferenceHub.route) {
                 ReferenceHubScreen()
             }
+        }
+    }
+
+    updateInfo?.let { info ->
+        var showDialog by remember { mutableStateOf(true) }
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                icon = {
+                    Icon(Icons.Filled.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                },
+                title = { Text("Update Available") },
+                text = {
+                    Column {
+                        Text("Version ${info.latestVersion} is ready to install.")
+                        if (info.releaseNotes.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = info.releaseNotes,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        showDialog = false
+                        updateManager.downloadAndInstall(
+                            downloadUrl = info.downloadUrl,
+                            versionName = info.latestVersion
+                        )
+                    }) {
+                        Text("Update & Install")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDialog = false }) {
+                        Text("Later")
+                    }
+                }
+            )
         }
     }
 }
