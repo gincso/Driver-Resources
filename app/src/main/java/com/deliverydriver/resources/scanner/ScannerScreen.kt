@@ -159,6 +159,7 @@ private fun PermissionDeniedScreen(
 
 // ── Camera Scanner UI ───────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CameraScannerView(
     viewModel: ScanViewModel,
