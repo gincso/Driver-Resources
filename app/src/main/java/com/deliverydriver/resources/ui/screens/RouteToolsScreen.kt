@@ -26,6 +26,8 @@ import com.deliverydriver.resources.data.models.ChecklistItem
 import com.deliverydriver.resources.data.models.DeliveryStop
 import com.deliverydriver.resources.data.models.StopStatus
 import com.deliverydriver.resources.data.repository.ResourceRepository
+import com.deliverydriver.resources.data.repository.StopRepository
+import com.deliverydriver.resources.scanner.RouteViewModel
 import com.deliverydriver.resources.ui.components.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -218,11 +220,16 @@ private fun ChecklistTab() {
 
 @Composable
 private fun AccessCodesTab() {
-    var accessCodes by remember {
-        mutableStateOf(listOf<AccessCode>())
-    }
+    var accessCodes by remember { mutableStateOf(listOf<AccessCode>()) }
     var showAddDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        StopRepository.loadAccessCodesFlow().collect { codes ->
+            accessCodes = codes
+        }
+    }
 
     val filteredCodes = remember(accessCodes, searchQuery) {
         if (searchQuery.isBlank()) accessCodes
@@ -303,6 +310,7 @@ private fun AccessCodesTab() {
                         )
                         IconButton(onClick = {
                             accessCodes = accessCodes.filter { it.id != code.id }
+                            scope.launch { StopRepository.saveAccessCodes(accessCodes) }
                         }) {
                             Icon(
                                 Icons.Filled.Delete,
@@ -346,6 +354,7 @@ private fun AccessCodesTab() {
             onDismiss = { showAddDialog = false },
             onSave = { code ->
                 accessCodes = accessCodes + code
+                scope.launch { StopRepository.saveAccessCodes(accessCodes) }
                 showAddDialog = false
             }
         )
@@ -434,6 +443,8 @@ private fun StopsTab() {
     }
 
     val (totalStops, deliveredStops, totalPackages) = com.deliverydriver.resources.scanner.RouteViewModel.getStats()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
 
     LazyColumn(
         modifier = Modifier
@@ -524,6 +535,49 @@ private fun StopsTab() {
                 Text("Add Stop")
             }
             Spacer(modifier = Modifier.height(4.dp))
+            if (stops.size >= 3) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                RouteViewModel.optimizeRoute(context)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFF00A8E8)
+                        )
+                    ) {
+                        Icon(
+                            Icons.Filled.Route,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Optimize Route")
+                    }
+                    if (!sortByAddress) {
+                        OutlinedButton(
+                            onClick = { RouteViewModel.toggleSort() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.SortByAlpha,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sort A–Z")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
         }
 
         if (filteredStops.isEmpty()) {
@@ -746,6 +800,12 @@ private fun AddEditStopDialog(
 
     val isEditing = existingStop != null
 
+    val historyMatch = remember(address) {
+        if (!isEditing && address.isNotBlank()) {
+            RouteViewModel.addressHistory[address.trim().lowercase()]
+        } else null
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isEditing) "Edit Stop" else "Add Delivery Stop") },
@@ -760,6 +820,43 @@ private fun AddEditStopDialog(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (historyMatch != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF00A8E8).copy(alpha = 0.1f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        onClick = {
+                            customerName = historyMatch.customerName
+                            customerPhone = historyMatch.customerPhone
+                            city = historyMatch.city
+                            state = historyMatch.state
+                            zip = historyMatch.zip
+                            deliveryNotes = historyMatch.deliveryNotes
+                            accessCode = historyMatch.accessCode
+                            packageCount = historyMatch.packageCount.toString()
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.History,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = Color(0xFF00A8E8)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Use saved info for ${historyMatch.customerName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF00A8E8)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(
                         value = city,

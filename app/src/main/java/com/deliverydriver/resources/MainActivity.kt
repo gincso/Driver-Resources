@@ -23,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.deliverydriver.resources.scanner.RouteViewModel
 import com.deliverydriver.resources.scanner.ScannerScreen
 import com.deliverydriver.resources.scanner.ScanResultsScreen
 import com.deliverydriver.resources.ui.screens.*
@@ -34,6 +35,7 @@ import com.deliverydriver.resources.updater.checkForUpdate
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        RouteViewModel.init(applicationContext)
         enableEdgeToEdge()
         setContent {
             DeliveryDriverTheme {
