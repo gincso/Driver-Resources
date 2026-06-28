@@ -69,7 +69,7 @@ fun DriverApp() {
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
 
     LaunchedEffect(Unit) {
-        val info = checkForUpdate()
+        val info = checkForUpdate(context)
         if (info.available) {
             updateInfo = info
         }

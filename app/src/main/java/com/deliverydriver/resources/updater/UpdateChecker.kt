@@ -1,5 +1,7 @@
 package com.deliverydriver.resources.updater
 
+import android.content.Context
+import android.content.pm.PackageManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -13,12 +15,21 @@ data class UpdateInfo(
     val releaseNotes: String = ""
 )
 
-suspend fun checkForUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
+suspend fun checkForUpdate(context: Context): UpdateInfo = withContext(Dispatchers.IO) {
     try {
-        val url = URL("https://api.github.com/repos/${UpdateConfig.githubOwner}/${UpdateConfig.githubRepo}/releases/latest")
+        val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0L))
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0)
+        }
+        val currentVersionName = packageInfo.versionName ?: "1.0"
+
+        val url = URL("https://api.github.com/repos/${UpdateConfig.GITHUB_OWNER}/${UpdateConfig.GITHUB_REPO}/releases/latest")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+        connection.setRequestProperty("User-Agent", "SortAssist-UpdateChecker")
         connection.connectTimeout = 10000
         connection.readTimeout = 10000
 
@@ -49,7 +60,7 @@ suspend fun checkForUpdate(): UpdateInfo = withContext(Dispatchers.IO) {
 
         if (downloadUrl.isBlank()) return@withContext UpdateInfo(false)
 
-        val currentParts = UpdateConfig.currentVersionName.split(".").map { it.toIntOrNull() ?: 0 }
+        val currentParts = currentVersionName.split(".").map { it.toIntOrNull() ?: 0 }
         val latestParts = tagName.split(".").map { it.toIntOrNull() ?: 0 }
 
         val isNewer = compareVersionLists(latestParts, currentParts) > 0
