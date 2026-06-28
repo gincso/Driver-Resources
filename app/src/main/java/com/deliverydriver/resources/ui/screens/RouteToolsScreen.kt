@@ -21,12 +21,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.deliverydriver.resources.data.models.AccessCode
 import com.deliverydriver.resources.data.models.ChecklistItem
 import com.deliverydriver.resources.data.models.DeliveryStop
 import com.deliverydriver.resources.data.models.StopStatus
 import com.deliverydriver.resources.data.repository.ResourceRepository
 import com.deliverydriver.resources.data.repository.StopRepository
+import com.deliverydriver.resources.location.LocationTracker
 import com.deliverydriver.resources.scanner.RouteViewModel
 import com.deliverydriver.resources.ui.components.*
 import kotlinx.coroutines.delay
@@ -1143,6 +1148,27 @@ private fun RouteStatsTab() {
     var shiftActive by remember { mutableStateOf(false) }
     var elapsedSeconds by remember { mutableStateOf(0L) }
 
+    val locationState by LocationTracker.state.collectAsState()
+    var locationPermissionGranted by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        locationPermissionGranted = granted
+        if (granted) {
+            shiftStartTime = System.currentTimeMillis()
+            shiftActive = true
+            LocationTracker.startTracking(context)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        locationPermissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     // Timer effect
     LaunchedEffect(shiftActive) {
         if (shiftActive && shiftStartTime != null) {
@@ -1206,6 +1232,56 @@ private fun RouteStatsTab() {
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        // GPS tracking status
+                        if (locationState.isTracking) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF00A8E8).copy(alpha = 0.1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.LocationOn,
+                                        contentDescription = null,
+                                        tint = Color(0xFF00A8E8),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "GPS: ${locationState.stops.size} stops · ${LocationTracker.getDistanceKm()} km",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF00A8E8)
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFFFB800).copy(alpha = 0.1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.LocationOff,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFB800),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "GPS waiting for signal...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFFFB800)
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1216,8 +1292,13 @@ private fun RouteStatsTab() {
                         if (!shiftActive && shiftStartTime == null) {
                             Button(
                                 onClick = {
-                                    shiftStartTime = System.currentTimeMillis()
-                                    shiftActive = true
+                                    if (locationPermissionGranted) {
+                                        shiftStartTime = System.currentTimeMillis()
+                                        shiftActive = true
+                                        LocationTracker.startTracking(context)
+                                    } else {
+                                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF00A67E)
@@ -1234,6 +1315,7 @@ private fun RouteStatsTab() {
                                 onClick = {
                                     shiftEndTime = System.currentTimeMillis()
                                     shiftActive = false
+                                    LocationTracker.stopTracking()
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFFFF4444)
@@ -1257,6 +1339,99 @@ private fun RouteStatsTab() {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Reset")
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── GPS Route Results (after shift ends) ────────────────────
+        if (shiftStartTime != null && !shiftActive && locationState.route.isNotEmpty()) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF00A8E8).copy(alpha = 0.08f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Route,
+                                contentDescription = null,
+                                tint = Color(0xFF00A8E8),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Your Route",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = LocationTracker.getDistanceKm(),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF00A8E8)
+                                )
+                                Text(
+                                    text = "km driven",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${locationState.stops.size}",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF00A67E)
+                                )
+                                Text(
+                                    text = "stops detected",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${locationState.route.size}",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFFB800)
+                                )
+                                Text(
+                                    text = "GPS points",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedButton(
+                            onClick = {
+                                context.startActivity(LocationTracker.getOpenMapsIntent())
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFF00A8E8)
+                            )
+                        ) {
+                            Icon(
+                                Icons.Filled.Map,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("View Route in Google Maps")
                         }
                     }
                 }
@@ -1475,7 +1650,7 @@ private fun RouteStatsTab() {
             title = { Text("Reset Stats?") },
             text = { Text("This will clear all route numbers and shift data.") },
             confirmButton = {
-                Button(onClick = {
+                    Button(onClick = {
                     totalPackages = ""
                     totalStops = ""
                     packagesDelivered = ""
@@ -1483,6 +1658,7 @@ private fun RouteStatsTab() {
                     shiftStartTime = null
                     shiftEndTime = null
                     elapsedSeconds = 0L
+                    LocationTracker.reset()
                     showResetDialog = false
                 }) { Text("Reset") }
             },

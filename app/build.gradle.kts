@@ -74,6 +74,9 @@ dependencies {
     // DataStore for persistence
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    // Location tracking
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
