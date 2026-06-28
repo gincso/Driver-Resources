@@ -38,16 +38,21 @@ jobs:
         run: chmod +x gradlew
 
       - name: Decode release keystore
+        id: keystore
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
         run: |
-          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "SIGNING_KEYSTORE_BASE64 secret is missing. Add keystore secrets to enable signed release builds."
-            exit 1
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > sortassist.keystore
+            echo "has_keystore=true" >> $GITHUB_OUTPUT
+            echo "Release keystore decoded"
+          else
+            echo "has_keystore=false" >> $GITHUB_OUTPUT
+            echo "::warning::SIGNING_KEYSTORE_BASE64 secret is missing. Signed release builds will not be available. Add keystore secrets to enable seamless in-app updates."
           fi
-          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > sortassist.keystore
 
       - name: Build Release APK
+        if: steps.keystore.outputs.has_keystore == 'true'
         env:
           KEYSTORE_PATH: sortassist.keystore
           KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
@@ -55,11 +60,17 @@ jobs:
           KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
+      - name: Build Debug APK (fallback)
+        if: steps.keystore.outputs.has_keystore != 'true'
+        run: ./gradlew assembleDebug
+
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Sort-Assist-APK
-          path: app/build/outputs/apk/release/*.apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Extract version from build.gradle.kts
@@ -80,7 +91,9 @@ jobs:
             
             ## Changes
             ${{ github.event.head_commit.message }}
-          files: app/build/outputs/apk/release/*.apk
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
