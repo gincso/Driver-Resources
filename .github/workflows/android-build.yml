@@ -43,7 +43,7 @@ jobs:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > sortassist.keystore
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > app/sortassist.keystore
             echo "has_keystore=true" >> $GITHUB_OUTPUT
             echo "Release keystore decoded"
           else
