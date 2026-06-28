@@ -31,7 +31,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -44,7 +43,7 @@ import java.util.concurrent.Executors
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ScannerScreen(
-    viewModel: ScanViewModel = viewModel(),
+    viewModel: ScanViewModel = ScanViewModel,
     onNavigateToResults: () -> Unit = {},
     onNavigateToResources: () -> Unit = {}
 ) {
@@ -503,7 +502,7 @@ fun CameraPreview(
                         val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                         val imageAnalysis = ImageAnalysis.Builder()
-                            .setTargetResolution(Size(1280, 720))
+                            .setTargetResolution(Size(640, 480))
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
 
@@ -546,6 +545,8 @@ fun CameraPreview(
                                 imageProxy.close()
                             }
                         }
+
+                        provider.unbindAll()
 
                         val cam = provider.bindToLifecycle(
                             lifecycleOwner,

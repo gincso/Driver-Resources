@@ -1,8 +1,8 @@
 package com.deliverydriver.resources.scanner
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,12 +24,12 @@ data class ScanState(
     val error: String? = null
 )
 
-class ScanViewModel(application: Application) : AndroidViewModel(application) {
+object ScanViewModel {
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val _state = MutableStateFlow(ScanState())
     val state: StateFlow<ScanState> = _state.asStateFlow()
 
-    // Debounce map to avoid duplicates
     private val recentDetections = mutableMapOf<Int, Long>()
     private val DEBOUNCE_MS = 3000L
 
@@ -38,10 +38,8 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val lastTime = recentDetections[number]
 
         if (lastTime != null && (now - lastTime) < DEBOUNCE_MS) {
-            // Check if this number is still pending addition
             val existing = _state.value.scannedPackages.find { it.driverAidNumber == number }
             if (existing != null) {
-                // Already added, just update last seen
                 recentDetections[number] = now
             }
             _state.value = _state.value.copy(lastDetectedNumber = number)
@@ -51,8 +49,7 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         recentDetections[number] = now
         _state.value = _state.value.copy(lastDetectedNumber = number)
 
-        // Add package with a small delay so user can see detection
-        viewModelScope.launch {
+        scope.launch {
             delay(200)
             addPackage(number)
         }
@@ -99,7 +96,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(error = msg)
     }
 
-    // Organization logic
     fun getOrganizationGroups(): Map<String, List<ScannedPackage>> {
         val packages = _state.value.scannedPackages
         if (packages.isEmpty()) return emptyMap()
@@ -107,7 +103,6 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         val sorted = packages.sortedBy { it.driverAidNumber }
         val groups = mutableMapOf<String, MutableList<ScannedPackage>>()
 
-        // Determine group size (rough quarters)
         val size = sorted.size
         val quarterSize = maxOf(1, size / 4)
 
