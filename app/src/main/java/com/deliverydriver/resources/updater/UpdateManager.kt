@@ -1,109 +1,86 @@
 package com.deliverydriver.resources.updater
 
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class UpdateManager(private val context: Context) {
 
-    private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    private var downloadId: Long = -1L
-    private var downloadedFileName: String = ""
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun downloadAndInstall(downloadUrl: String, versionName: String) {
-        downloadedFileName = "SortAssist-v$versionName.apk"
+        Toast.makeText(context, "Downloading v$versionName...", Toast.LENGTH_SHORT).show()
 
-        val destDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-        val previousFile = File(destDir, downloadedFileName)
-        previousFile.delete()
+        scope.launch {
+            try {
+                val apkFile = File(context.cacheDir, "update-$versionName.apk")
+                apkFile.delete()
 
-        val request = DownloadManager.Request(Uri.parse(downloadUrl)).apply {
-            setTitle("Sort Assist Update")
-            setDescription("Downloading v$versionName...")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, downloadedFileName)
-            setMimeType("application/vnd.android.package-archive")
-            setAllowedNetworkTypes(
-                DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE
-            )
-            setRequiresCharging(false)
-        }
+                val url = URL(downloadUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = true
+                connection.connectTimeout = 30000
+                connection.readTimeout = 30000
+                connection.setRequestProperty("User-Agent", "SortAssist-Updater")
+                connection.connect()
 
-        downloadId = downloadManager.enqueue(request)
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Download failed (HTTP ${connection.responseCode})", Toast.LENGTH_LONG).show()
+                    }
+                    connection.disconnect()
+                    return@launch
+                }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(
-                downloadCompleteReceiver,
-                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-                Context.RECEIVER_EXPORTED
-            )
-        } else {
-            context.registerReceiver(
-                downloadCompleteReceiver,
-                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-            )
-        }
-    }
+                val inputStream = connection.inputStream
+                val outputStream = FileOutputStream(apkFile)
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalBytes = 0L
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalBytes += bytesRead
+                }
+                outputStream.close()
+                inputStream.close()
+                connection.disconnect()
 
-    private val downloadCompleteReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val receivedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-            if (receivedId != downloadId) return
+                if (!apkFile.exists() || totalBytes == 0L) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Downloaded file is empty", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
 
-            context.unregisterReceiver(this)
+                withContext(Dispatchers.Main) {
+                    val apkUri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        apkFile
+                    )
 
-            val query = DownloadManager.Query().setFilterById(downloadId)
-            val cursor = downloadManager.query(query)
-            if (!cursor.moveToFirst()) {
-                cursor.close()
-                return
+                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(apkUri, "application/vnd.android.package-archive")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    }
+                    context.startActivity(installIntent)
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Update error: ${e.localizedMessage ?: "unknown"}", Toast.LENGTH_LONG).show()
+                }
             }
-
-            val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-            val status = cursor.getInt(statusIndex)
-            cursor.close()
-
-            if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                installApk()
-            } else {
-                Toast.makeText(context, "Download failed", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun installApk() {
-        try {
-            val apkFile = File(
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                downloadedFileName
-            )
-            if (!apkFile.exists()) {
-                Toast.makeText(context, "Update file not found", Toast.LENGTH_LONG).show()
-                return
-            }
-
-            val apkUri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                apkFile
-            )
-
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-            }
-            context.startActivity(installIntent)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Could not open installer: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
     }
 }
